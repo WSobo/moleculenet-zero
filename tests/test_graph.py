@@ -1,61 +1,91 @@
+"""Tests for the Graph class."""
 import numpy as np
 import pytest
+
 from mnz.graph import Graph
 
 
-def test_chain_graph_basic():
-    """Chain 0-1-2-3 should report 4 nodes and 6 directed edges."""
-    X = np.array([[1.0], [2.0], [3.0], [4.0]])
-    edge_index = np.array([
-        [0, 1, 1, 2, 2, 3],
-        [1, 0, 2, 1, 3, 2],
-    ])
-    g = Graph(X=X, edge_index=edge_index)
-    assert g.num_nodes == 4
-    assert g.num_edges == 6
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def chain_graph():
+    """The chain graph 0-1-2-3 with simple scalar features.
     
-def test_chain_graph_adjacency():
-    """Chain 0-1-2-3 should have correct adjacency matrix."""
+    Used as the canonical small graph for tests. Each test gets a fresh instance.
+    """
     X = np.array([[1.0], [2.0], [3.0], [4.0]])
     edge_index = np.array([
-        [0, 1, 1, 2, 2, 3],
-        [1, 0, 2, 1, 3, 2],
+        [0, 1, 1, 2, 2, 3],   # source nodes
+        [1, 0, 2, 1, 3, 2],   # destination nodes
     ])
-    g = Graph(X=X, edge_index=edge_index)
-    A_naive = g.naive_adjacency()
-    A_fast = g.adjacency()
+    return Graph(X=X, edge_index=edge_index)
+
+
+# ---------------------------------------------------------------------------
+# Basic structure tests
+# ---------------------------------------------------------------------------
+
+def test_chain_graph_basic(chain_graph):
+    """Chain 0-1-2-3 should report 4 nodes and 6 directed edges."""
+    assert chain_graph.num_nodes == 4
+    assert chain_graph.num_edges == 6
+
+
+def test_chain_graph_adjacency(chain_graph):
+    """Adjacency matrix should match a naive reference and the hand-computed expected."""
+    # naive reference: build A by looping over edges
+    A_naive = np.zeros((chain_graph.num_nodes, chain_graph.num_nodes))
+    for k in range(chain_graph.num_edges):
+        src, dst = chain_graph.edge_index[:, k]
+        A_naive[src, dst] = 1
+    
+    A_fast = chain_graph.adjacency()
     assert np.array_equal(A_naive, A_fast), "Naive and fast adjacency should match"
+    
     expected_A = np.array([
         [0, 1, 0, 0],
         [1, 0, 1, 0],
         [0, 1, 0, 1],
         [0, 0, 1, 0],
     ])
-    assert np.array_equal(A_fast, expected_A), "Adjacency matrix should match expected"
-    # test symmetry for undirected graph
-    assert np.array_equal(A_fast, A_fast.T), "Adjacency matrix should be symmetric for undirected graph"
-    
+    assert np.array_equal(A_fast, expected_A), "Adjacency matrix should match hand-derived"
+    assert np.array_equal(A_fast, A_fast.T), "Adjacency should be symmetric for undirected graph"
+
+
+# ---------------------------------------------------------------------------
+# Validation tests
+# ---------------------------------------------------------------------------
+
 def test_rejects_1d_X():
     with pytest.raises(AssertionError):
         Graph(X=np.array([1.0, 2.0]), edge_index=np.array([[0], [1]]))
+
 
 def test_rejects_1d_edge_index():
     with pytest.raises(AssertionError):
         Graph(X=np.array([[1.0], [2.0]]), edge_index=np.array([0, 1]))
 
+
 def test_rejects_3xE_edge_index():
     with pytest.raises(AssertionError):
         Graph(X=np.array([[1.0], [2.0]]), edge_index=np.array([[0, 1], [1, 0], [0, 1]]))
 
+
 def test_rejects_out_of_bounds_edge_index():
     with pytest.raises(AssertionError):
         Graph(X=np.array([[1.0], [2.0]]), edge_index=np.array([[0, 1], [2, 3]]))
-        
+
+
 def test_rejects_negative_edge_index():
     with pytest.raises(AssertionError):
         Graph(X=np.array([[1.0], [2.0]]), edge_index=np.array([[0, 1], [-1, 0]]))
 
-### Tests for normalized adjacency ###
+
+# ---------------------------------------------------------------------------
+# Normalized adjacency tests
+# ---------------------------------------------------------------------------
 
 def test_normalized_adjacency_matches_naive_reference(chain_graph):
     """Optimized normalized_adjacency should match a slow np.diag-based reference."""
@@ -67,18 +97,21 @@ def test_normalized_adjacency_matches_naive_reference(chain_graph):
 
 
 def test_normalized_adjacency_chain_values(chain_graph):
-    """Hand-derived values for the chain 0-1-2-3."""
+    """Hand-derived values for the chain 0-1-2-3 with self-loops."""
     A_hat = chain_graph.normalized_adjacency()
-    # diagonal: self-loop weights, 1/(deg+1)
-    assert np.isclose(A_hat[0, 0], 0.5)        # node 0: deg 2 with self-loop
-    assert np.isclose(A_hat[1, 1], 1/3)        # node 1: deg 3 with self-loop
-    # off-diagonal: 1/sqrt(deg_i * deg_j)
-    assert np.isclose(A_hat[0, 1], 1 / np.sqrt(6))   # 1/sqrt(2*3)
+    # diagonal: self-loop weights, 1/(deg+1) where deg+1 includes the self-loop
+    assert np.isclose(A_hat[0, 0], 0.5)              # node 0: deg 1 + self-loop = 2
+    assert np.isclose(A_hat[1, 1], 1/3)              # node 1: deg 2 + self-loop = 3
+    # off-diagonal: 1 / sqrt(deg_i * deg_j) with self-loop-inflated degrees
+    assert np.isclose(A_hat[0, 1], 1 / np.sqrt(6))   # 1 / sqrt(2 * 3)
 
 
 def test_normalized_adjacency_is_symmetric(chain_graph):
+    """A_hat = D^-1/2 (A+I) D^-1/2 should be symmetric."""
     A_hat = chain_graph.normalized_adjacency()
     np.testing.assert_allclose(A_hat, A_hat.T)
-    
-    
-### tests for forward pass ###
+
+
+# ---------------------------------------------------------------------------
+# TODO: forward pass tests once GCNLayer exists
+# ---------------------------------------------------------------------------
