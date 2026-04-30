@@ -35,6 +35,8 @@ class Graph:
         A_tilde = self.adjacency() + np.eye(self.num_nodes)  # A + I, shape (N, N)
         d_inv_sqrt = A_tilde.sum(axis=1) ** -0.5     # shape (N,)
         return d_inv_sqrt[:, None] * A_tilde * d_inv_sqrt[None, :]
+    
+    
         
 
 
