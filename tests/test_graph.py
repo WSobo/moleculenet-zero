@@ -3,7 +3,9 @@ import numpy as np
 import pytest
 
 from mnz.graph import Graph
-
+from mnz.layers import GCNLayer
+from mnz.layers import Linear
+from mnz.layers import mean_readout
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -113,5 +115,39 @@ def test_normalized_adjacency_is_symmetric(chain_graph):
 
 
 # ---------------------------------------------------------------------------
-# TODO: forward pass tests once GCNLayer exists
+# Layer tests
 # ---------------------------------------------------------------------------
+
+def test_gcn_layer_output_shape(chain_graph):
+    """GCNLayer should produce output of shape (N, out_features)."""
+    gcn = GCNLayer(in_features=1, out_features=2, seed=42)
+    output = gcn(chain_graph)
+    assert output.shape == (chain_graph.num_nodes, 2), "GCNLayer output shape should be (N, out_features)"
+    
+def test_linear_layer_output_shape():
+    """Linear layer should produce output of shape (N, out_features)."""
+    linear = Linear(in_features=1, out_features=3, seed=42)
+    X = np.array([[1.0], [2.0], [3.0]])
+    output = linear(X)
+    assert output.shape == (X.shape[0], 3), "Linear layer output shape should be (N, out_features)"
+    
+def test_linear_output_shape_2d():
+    linear = Linear(in_features=8, out_features=1, seed=42)
+    X = np.zeros((4, 8))
+    assert linear(X).shape == (4, 1)
+
+def test_linear_output_shape_1d():
+    linear = Linear(in_features=8, out_features=1, seed=42)
+    x = np.zeros(8)
+    assert linear(x).shape == (1,)
+    
+def test_mean_readout_correctness():
+    """mean_readout should average node features correctly."""
+    H = np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])  # shape (3, 2)
+    graph_vector = mean_readout(H)
+    expected = np.array([3.0, 4.0])  # mean of each column
+    np.testing.assert_allclose(graph_vector, expected)
+    
+# ----------------------------------------------------------------------------
+# TODO: Add tests once backward propogation is added
+# ----------------------------------------------------------------------------
